@@ -91,3 +91,10 @@ Unstitched fabric shop "Somani Fabs - Shivnarayan Shivbhagwan Somani" (Kuchaman 
 - Verified in preview: `REACT_APP_BACKEND_URL="" craco build` exits 0 and compiles API base to "/api" (same-origin, works on IP and domain). Docker not available in preview pod, so image builds are unverified until the user runs them on the droplet.
 - User must supply their OWN Gemini API key (aistudio.google.com/apikey) on the droplet; the Emergent universal key won't work off-platform.
 - Old prod data lives in Emergent's DB; Atlas starts empty (admin + categories auto-seed).
+
+## Independence tooling + staging (2026-06)
+- Added CLAUDE.md (repo context/rules for any AI coding tool: /api prefix, fast /health, api.js only, env-only secrets, async generation, no base64 in polled endpoints, 7-day TTL, i18n 3 languages, data-testid, clean CI build) and WORKFLOW.md (tool options, local dev with separate dev DB, branch->PR->merge loop, prompting guidance, rollback, optional Sentry/uptime/backups).
+- Added LAPTOP-SETUP.md (fresh laptop: Mac brew / Windows WSL2 install, SSH to GitHub, dev DB, first change end-to-end; AI tool pricing as of mid-2026: Copilot Free -> Claude Pro $20 Claude Code recommended).
+- Added dev.sh (one-command local run: venv + pip -r requirements.prod.txt + yarn + uvicorn 8001 + CRA 3000; refuses to start without backend/.env and warns if DB_NAME is the live one).
+- Added staging-on-same-droplet: docker-compose.staging.yml (host ports 8002/3001, compose project somanifabs-staging), deploy/nginx-staging.conf (staging.somanifabs.com), deploy/deploy-staging.sh (resets to origin/staging), .github/workflows/deploy-staging.yml (push to `staging` branch), STAGING-SETUP.md (second checkout at /opt/somanifabs-staging, DB_NAME=somanifabs_stage, certbot for subdomain, optional htpasswd, promote staging->main flow).
+- Verified: all shell scripts pass `bash -n`, all compose/workflow YAML parses. Docker/droplet execution is user-side (no Docker in preview pod).
