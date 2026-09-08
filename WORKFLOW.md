@@ -1,5 +1,9 @@
 # WORKFLOW.md — how to keep improving the app now that it is live
 
+> **New here? Read `START-HERE.md` instead.** That is the simple, four-message version and
+> it is all you need day to day. This file is the fuller reference for when you want more
+> control (branches, staging, monitoring).
+
 You are not a coder, but you own the product. This is the setup professional teams use,
 scaled down to one person. Read once, then follow the checklist at the bottom forever.
 

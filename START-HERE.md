@@ -1,130 +1,151 @@
-# START-HERE.md — the simple version (for a non-coder)
+# START-HERE.md — the simple system (for a non-coder)
 
-You will **never type git commands**. You will talk to Claude in a window, in English,
-and Claude does the work. This page is the whole system on one page.
+You will **never type a git command**. You talk to Claude in a window, in plain English,
+and Claude does the work. This page is the whole system.
 
 ---
 
-## PART 1 — One-time setup (about 30 minutes)
+## First, three words explained
 
-### 1. Subscribe to Claude Pro
-Go to <https://claude.ai> → subscribe to **Pro** (~$20/month). This includes Claude Code.
+**Your folder.** There is exactly **one** folder on your computer with your app in it,
+e.g. `Documents/somanifabs`. There is no copy inside it. One folder.
 
-### 2. Install the Claude desktop app
-Download from <https://claude.ai/download> (works on Mac and Windows). Install, open it,
-log in. Make sure it updates itself to the latest version.
+**Git.** A time machine for that folder. Every time you publish (and every time Claude
+saves), git stores the complete state of the folder. You can return to any earlier state
+in a minute. Nothing is ever really lost.
 
-### 3. Get your project on your computer
-Open the Claude app → click the **Code** tab → **select a project folder**.
-If you don't have the project on your computer yet, first make an empty folder
-(e.g. `Documents/somanifabs`), select it, and then paste this message to Claude:
+**Branch.** A *name for a line of versions* — not a folder. Switching branch makes git
+rewrite the files inside your one folder to match that version. `main` is the line your
+live website is built from. You mostly won't need any other branch (see Part 4).
+
+---
+
+## PART 1 — Setup (once, about 30 minutes)
+
+**1.** Go to <https://claude.ai> and subscribe to **Pro** (~$20/month). Claude Code is included.
+
+**2.** Install the **Claude desktop app**: <https://claude.ai/download> (Mac or Windows).
+Open it, log in, let it update itself.
+
+**3.** Create an empty folder, e.g. `Documents/somanifabs`. In the Claude app open the
+**Code** tab → **select project folder** → choose that folder.
+
+**4.** Paste this message to Claude (change the username and your operating system):
 
 > Download my project from GitHub into this folder. My repository is
-> `https://github.com/MY_USERNAME/somanifabs`. Install anything you need
-> (git, node, yarn, python) and tell me one step at a time in simple words.
-> I am not a programmer. I am on a Mac / on Windows (delete the wrong one).
+> `https://github.com/MY_USERNAME/somanifabs`. Install whatever my computer needs
+> (git, node, yarn, python). Guide me one step at a time in simple words — I am not a
+> programmer. I am on a Mac.
 
-Claude will ask permission before running each command — click **Allow**. That's it:
-your code is now on your computer and Claude can see all of it.
+Claude asks permission before each command — click **Allow**.
 
-### 4. One last setup message
-Paste this to Claude:
+**5.** Paste this last setup message:
 
-> Read the files CLAUDE.md and WORKFLOW.md in this project so you know the rules.
-> Then check that `bash check.sh` runs successfully, and fix anything missing on my
-> computer so it does. Explain what you did in simple words.
+> Read CLAUDE.md and WORKFLOW.md so you know this project's rules. Then make sure
+> `bash check.sh` runs successfully on my computer, fixing anything that is missing.
+> Explain what you did in simple words.
 
-When Claude says the check passed, your setup is complete. You never do this again.
+When it reports the check passed, setup is finished. You never do Part 1 again.
 
 ---
 
-## PART 2 — Making a change (every time, 4 messages)
+## PART 2 — The loop for ANY change (four messages)
 
-Open the Claude app → **Code** tab → your project. Then send these four messages, one
-after the other, waiting for Claude to finish each time.
+Open the Claude app → **Code** tab → your project folder. Send these one at a time.
 
-**Message 1 — start safely**
+**Message 1 — always start with this**
 
-> Read CLAUDE.md first. Then create a new branch for a change called
-> "whatsapp-share" and tell me when you're ready.
+> Read CLAUDE.md first, then wait for my instruction.
 
-*(A "branch" is a private copy of the app. Anything you do in it cannot affect the shop's
-live website until you deliberately publish it. This is your seatbelt.)*
+**Message 2 — say what you want, in your own words**
 
-**Message 2 — ask for the change**
+> Here is the change I want: <describe it plainly — what screen, what should happen,
+> who uses it>. Keep it small and don't change anything else. Follow the rules in
+> CLAUDE.md. If any new text appears on screen, add it in all three languages.
 
-> Now do this change: <describe it in plain English, e.g. "On the try-on preview screen,
-> add a button that sends the generated photo to the customer on WhatsApp using their
-> saved mobile number">.
-> Keep it small, don't change anything else, add the button text in all three languages,
-> and follow the rules in CLAUDE.md.
+**Message 3 — see it before anyone else does**
 
-**Message 3 — try it yourself before anyone else does**
+> Run `bash dev.sh` so I can test the app on my own computer, and tell me which address
+> to open.
 
-> Run `bash dev.sh` so I can open the app on my own computer and test it.
-> Tell me the address to open.
+Open that address (usually `http://localhost:3000`) and use the app the way your staff
+would. **This is a private copy using a test database — real customer data cannot be
+touched.** Keep telling Claude what to adjust until you are happy.
 
-Open the address it gives you (usually <http://localhost:3000>) in your browser and use
-the app like your staff would. This is a **private copy with a test database** — you
-cannot damage real customer data here. Tell Claude what you want fixed until you're happy.
+**Message 4 — publish**
 
-**Message 4 — publish it**
+> Run `bash check.sh`. If it passes, run `bash ship.sh "<short description of the
+> change>"`, then tell me in simple words what happened and whether the live website was
+> updated.
 
-> Run `bash check.sh`. If it passes, run
-> `bash ship.sh "Add WhatsApp share button"` and then tell me in simple words what
-> happened and whether the website was updated.
+Then open your live website and look. That's the entire cycle.
 
-`check.sh` is the safety gate. `ship.sh` saves your change, sends it to GitHub, and
-deploys it. Then open <https://somanifabs.com> and see your change live.
-
-*(If you prefer your own manual deploy button: tell Claude "just push, don't deploy",
-then click **Actions → Deploy → Run workflow** on GitHub as you do today.)*
+*(Prefer your own deploy button? Say "just push, don't deploy" and click
+**Actions → Deploy → Run workflow** on GitHub instead.)*
 
 ---
 
-## PART 3 — What those three commands actually do
+## PART 3 — What each command does
 
-| Command | In plain English | Why you need it |
+| Command | In plain English | Why it exists |
 |---|---|---|
-| `bash dev.sh` | Starts a **private copy** of your app on your own computer, using a test database | So you can click around and see the change before customers do. Nothing here touches the shop. |
-| `bash check.sh` | Builds the app the same strict way your server does | If this fails, the deploy would have failed too. It catches the mistake **before** it reaches the shop. |
-| `bash ship.sh "message"` | Saves the change, sends it to GitHub, and updates the live website | This is your publish button. It refuses to publish if `check.sh` failed, and asks you to type `live` before touching the real website. |
-
-And two words you'll keep hearing:
-
-- **Branch** = a private copy of the app where you experiment. Free, unlimited, harmless.
-- **Merge / publish** = deliberately moving that copy into the real website.
+| `bash dev.sh` | Runs a **private copy** of the app on your own computer with a **test database** | So you can click around and judge the change before customers see it. Cannot affect the shop. |
+| `bash check.sh` | Builds the app the same strict way the server does | If this fails, the deploy would have failed too. It catches the mistake before it reaches the shop. |
+| `bash ship.sh "message"` | Saves the change, sends it to GitHub, updates the live website | Your publish button. Refuses to publish a broken build; asks you to type `live` first. |
 
 ---
 
-## PART 4 — When something goes wrong
+## PART 4 — Do you need a branch every time? No.
+
+You are one person making one change at a time and testing it before publishing, so
+**work directly and just use Part 2**. If you dislike a change, say:
+
+> Undo everything you just changed and go back to the last saved version.
+
+Git makes that instant and exact — that is the protection a branch would have given you.
+
+**Use a branch only when:**
+- the change is big and will take you several days, or
+- you want to pause halfway and come back later.
+
+Then say:
+
+> Put this work on a separate branch named `<any label you like>` so my live version
+> stays untouched, and tell me how to get back to my normal version.
+
+And when it is tested and you want it live:
+
+> Publish that branch to the live website and then delete the branch.
+
+The name is only a label for you. Nothing depends on it.
+
+---
+
+## PART 5 — When something goes wrong
 
 Paste this to Claude:
 
 > Something is broken. Read CLAUDE.md, look at the error below, explain in simple words
-> what happened, and fix it. Then run `bash check.sh`.
+> what happened, then fix it and run `bash check.sh`.
 > <paste the red error text here>
 
-If the **live website** breaks after a publish, paste this:
+If the **live website** is broken after a publish:
 
-> The live website is broken. Undo my last change on the server immediately and put the
-> previous working version back. Then explain what went wrong.
-
-Nothing is ever permanently lost — every version of your app is saved in GitHub forever,
-and going back is a one-minute job.
+> The live website is broken. Put the previous working version back on the server right
+> now, then explain in simple words what went wrong.
 
 ---
 
-## PART 5 — Your five rules
+## PART 6 — Five rules
 
-1. One change at a time. Never ask for three things in one go.
-2. Always start with *"Read CLAUDE.md first."*
+1. One change at a time. Never ask for three things at once.
+2. Always begin a session with *"Read CLAUDE.md first."*
 3. Always test with `bash dev.sh` before publishing.
-4. Never publish on a busy shop evening. Publish in the morning, then watch it for 10 minutes.
-5. Before publishing, ask Claude: *"Explain in simple words what you changed and what
-   could break."* If it mentions things you didn't ask for, say *"undo that and only do
-   what I asked."*
+4. Publish in the morning, never on a busy shop evening — then watch the site for 10 minutes.
+5. Before publishing, ask: *"Explain in simple words what you changed and what could
+   break."* If it mentions anything you did not ask for, say *"undo that, do only what I
+   asked."*
 
 ---
 
-That's the entire system. Setup once (Part 1), then four messages per change (Part 2).
+Setup once (Part 1). Then four messages per change (Part 2). That is the whole system.
