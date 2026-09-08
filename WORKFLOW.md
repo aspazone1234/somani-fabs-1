@@ -64,14 +64,20 @@ Now you can break anything with zero risk to the shop.
 ## 3. The change loop (use this every single time)
 
 ```
-1. git checkout main && git pull                 # start from what is live
+1. git checkout staging && git pull              # start from the tested copy
 2. git checkout -b change/whatsapp-share         # a branch = a safe sandbox
 3. claude                                        # describe the change in plain English
-4. test it locally at localhost:3000
-5. git add -A && git commit -m "Add WhatsApp share button" && git push -u origin change/...
-6. Open a Pull Request on GitHub → read the diff → Merge to main
-7. GitHub Actions deploys automatically (~4 min). Check https://somanifabs.com
+4. bash dev.sh          -> test it at localhost:3000
+5. bash check.sh        -> must say "All checks passed"
+6. bash ship.sh "Add WhatsApp share button"      # commits + pushes (+ deploys on main/staging)
+7. merge the branch into `staging` on GitHub -> check https://staging.somanifabs.com
+8. happy? merge `staging` into `main` -> the shop website updates
 ```
+
+`ship.sh` runs `check.sh` for you, refuses to push a broken build, asks for confirmation
+before touching `main`, and — if you have the GitHub CLI (`gh`) installed — triggers the
+deploy and streams the progress in your terminal. Without `gh`, just click
+**Actions → Deploy → Run workflow** on GitHub instead.
 
 Why branches + pull request? Because `main` is what your shop runs on. A branch lets you
 try, throw away, or park an idea. Merging is a deliberate one-click act — that is the
