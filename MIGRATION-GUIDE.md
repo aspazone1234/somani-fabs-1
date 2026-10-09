@@ -1,7 +1,7 @@
 # Somani Fabs — Full Migration to Your Own DigitalOcean Droplet
 
 **Goal:** run this app 100% on your own server, with your own GitHub repo, so that
-every `git push` automatically updates the live site. No Emergent needed afterwards.
+every `git push` automatically updates the live site. No third-party hosting platform needed.
 
 **How it will work when finished:**
 
@@ -23,7 +23,7 @@ Everything the server needs is already in this repo:
 | File | What it does |
 |---|---|
 | `backend/Dockerfile` | Builds the FastAPI backend image |
-| `backend/requirements.prod.txt` | Backend packages (no Emergent-only packages) |
+| `backend/requirements.prod.txt` | Backend packages (production packages only) |
 | `frontend/Dockerfile` | Builds the React app and serves it with nginx |
 | `docker-compose.yml` | Runs both containers together |
 | `deploy/setup-droplet.sh` | One-time server setup (Docker, nginx, firewall, HTTPS tool) |
@@ -36,7 +36,7 @@ Everything the server needs is already in this repo:
 
 ## STEP 1 — Put the code on GitHub (5 min)
 
-1. In the Emergent chat input, use the **“Save to GitHub”** button.
+1. Push this code to a GitHub repository you own.
 2. Create a **private** repo, e.g. `somanifabs`. Branch: `main`.
 3. Confirm on github.com that you can see `backend/`, `frontend/`, `deploy/`,
    `docker-compose.yml`.
@@ -58,10 +58,10 @@ go into GitHub). You will create the `.env` directly on the droplet in Step 4.
    `mongodb+srv://USER:PASSWORD@cluster0.abcde.mongodb.net/?retryWrites=true&w=majority`
    Replace `USER` and `PASSWORD` with the ones you created.
 
-**About your existing data:** the current production database lives inside Emergent, so
+**About your existing data:** the old production database lives with the previous host, so
 Atlas starts empty. Your admin account is re-created automatically on first start from
-`SUPER_ADMIN_USERNAME` / `SUPER_ADMIN_PASSWORD`. Customer records would need to be
-re-added (or ask Emergent support for a database dump if you want them moved).
+`SUPER_ADMIN_MOBILE` (or `SUPER_ADMIN_EMAIL`) / `SUPER_ADMIN_PASSWORD`. Customer records would need to be
+re-added (or ask the previous host for a database dump if you want them moved).
 Categories/settings are re-created automatically.
 
 ---
@@ -114,11 +114,12 @@ Fill in:
 | `DB_NAME` | `somanifabs` (keep it the same forever) |
 | `CORS_ORIGINS` | `*` for now |
 | `JWT_SECRET` | any long random text (run `openssl rand -hex 32` to make one) |
-| `SUPER_ADMIN_USERNAME` | your admin login |
+| `SUPER_ADMIN_MOBILE` | the owner's mobile number, used to sign in |
+| `SUPER_ADMIN_EMAIL` | the owner's email, a second way to sign in |
 | `SUPER_ADMIN_PASSWORD` | your admin password |
-| `GEMINI_API_KEY` | your Google AI Studio key — <https://aistudio.google.com/apikey> |
-| `GEMINI_IMAGE_MODEL` | `gemini-3.1-flash-image` |
-| `GEMINI_IMAGE_FALLBACK_MODEL` | `gemini-2.5-flash-image` |
+| `OPENAI_API_KEY` | your OpenAI key — <https://platform.openai.com/api-keys> |
+| `OPENAI_IMAGE_MODEL` | `gpt-image-2.5-sunburst` (best at keeping the face while changing clothes; `gpt-image-2.5-flare` is the automatic fallback) |
+| `OPENAI_IMAGE_QUALITY` | `low` (cheapest, good for try-on; `medium` costs several times more) |
 
 Save with `Ctrl+O`, `Enter`, then `Ctrl+X`.
 
@@ -126,9 +127,28 @@ Save with `Ctrl+O`, `Enter`, then `Ctrl+X`.
 chmod 600 .env      # only root can read the secrets
 ```
 
-> The Gemini key currently used in Emergent belongs to Emergent’s universal key, so
-> you need **your own** Google AI Studio key for the droplet. It is free to create;
-> image generation is billed by Google to your own Google account.
+> Try-on images are generated with OpenAI’s image API, billed to your own OpenAI
+> account. Make sure billing is set up at <https://platform.openai.com/settings/organization/billing>.
+
+**WhatsApp (optional, can be done later).** `env.example` also has these lines.
+Leave `WHATSAPP_ENABLED=false` until you have followed
+[docs/whatsapp-setup.md](docs/whatsapp-setup.md). With it off, the app works
+without WhatsApp.
+
+| Key | Value |
+|---|---|
+| `WHATSAPP_ENABLED` | `false` until setup is done, then `true` |
+| `WHATSAPP_GRAPH_VERSION` | `v23.0` (Meta Graph API version) |
+| `WHATSAPP_TOKEN` | permanent System User token (setup guide step 8) |
+| `WHATSAPP_PHONE_NUMBER_ID` | from WhatsApp → API Setup (step 9) |
+| `WHATSAPP_WABA_ID` | WhatsApp Business Account ID (step 9) |
+| `WHATSAPP_APP_SECRET` | App settings → Basic → App secret (step 9) |
+| `WHATSAPP_VERIFY_TOKEN` | any random word you choose; typed again in the webhook setup |
+| `WHATSAPP_APP_ID` | App ID; only needed for image templates |
+| `PUBLIC_BASE_URL` | `https://somanifabs.com` (used for review/map links) |
+
+This release also adds a `/r/` block to `deploy/nginx-site.conf`. On an existing
+droplet, copy it again (setup guide step 10).
 
 ---
 
@@ -146,7 +166,7 @@ Expected health output: `{"status":"ok", ...}`.
 
 Now open in your browser: **`http://YOUR_DROPLET_IP`**
 
-- Login with your `SUPER_ADMIN_USERNAME` / `SUPER_ADMIN_PASSWORD`.
+- Login with your `SUPER_ADMIN_MOBILE` (or `SUPER_ADMIN_EMAIL`) / `SUPER_ADMIN_PASSWORD`.
 - Add a customer with a photo, start a session, generate a try-on image.
 - Check the live display URL too.
 
@@ -190,7 +210,7 @@ BigRock / Hostinger…), open **DNS management** for `somanifabs.com`, and set:
 | A | `@` | `YOUR_DROPLET_IP` | 300 |
 | A | `www` | `YOUR_DROPLET_IP` | 300 |
 
-Delete any old A / CNAME records that pointed to Emergent. If the domain uses
+Delete any old A / CNAME records that pointed to the previous host. If the domain uses
 Cloudflare, set the record to **DNS only (grey cloud)** until HTTPS is issued.
 
 Wait 10–30 minutes, then check on the droplet:
@@ -215,7 +235,7 @@ nano /opt/somanifabs/.env       # CORS_ORIGINS=https://somanifabs.com,https://ww
 cd /opt/somanifabs && docker compose up -d
 ```
 
-**7d. Turn off the Emergent deployment** once the droplet is live, so you stop paying for it.
+**7d. Turn off the old deployment** once the droplet is live, so you stop paying for it.
 
 ---
 
@@ -279,7 +299,7 @@ systemctl reload nginx                # after editing nginx config
 | Site shows nginx default page | `rm -f /etc/nginx/sites-enabled/default && systemctl reload nginx` |
 | 502 Bad Gateway | Containers are down → `docker compose up -d`, then check `docker compose logs backend` |
 | Login fails / backend unhealthy | Wrong `MONGO_URL`, or droplet IP not whitelisted in Atlas → Network Access |
-| Try-on generation fails | Bad/exhausted `GEMINI_API_KEY`, or Google billing not enabled |
+| Try-on generation fails | Bad/exhausted `OPENAI_API_KEY`, or OpenAI billing not set up |
 | Build killed / out of memory | The setup script adds 2 GB swap; if it still fails, resize the droplet to 2 GB RAM |
 | GitHub Action fails at SSH | Re-copy the **private** key (all lines) into `DROPLET_SSH_KEY` |
 

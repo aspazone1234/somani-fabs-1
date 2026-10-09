@@ -1,195 +1,151 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { api, apiErr } from "@/lib/api";
+import { api } from "@/lib/api";
 import { useLang } from "@/i18n";
-import { toast } from "sonner";
-import { Plus, Clock, History, X, Phone, User } from "lucide-react";
-import Camera from "@/admin/Camera";
+import { Plus, Search, Users, ChevronRight, Clock } from "lucide-react";
+import Avatar from "@/admin/Avatar";
+import { HistoryStrip } from "@/admin/CustomerHistory";
+import { can } from "@/admin/perms";
+import { Button, Page, PageHeader, Empty, Skeleton, Card, inputCls } from "@/admin/ui";
 
 function fmt(iso) {
-  try { return new Date(iso).toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }); } catch { return ""; }
-}
-function fmtDate(iso) {
-  try { return new Date(iso).toLocaleDateString("en-IN", { day: "2-digit", month: "short" }); } catch { return ""; }
+  try { return new Date(iso).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" }); } catch { return ""; }
 }
 
-function CreateSession({ onClose, onCreated, fields }) {
+// "Just now", "12 min", "2 hr": how long the customer has been in the shop.
+export function useSince() {
   const { t } = useLang();
-  const [name, setName] = useState("");
-  const [mobile, setMobile] = useState("");
-  const [mobile2, setMobile2] = useState("");
-  const [extra, setExtra] = useState({});
-  const [photo, setPhoto] = useState("");
-  const [showCam, setShowCam] = useState(false);
-  const [suggestions, setSuggestions] = useState([]);
-  const [saving, setSaving] = useState(false);
+  const [, tick] = useState(0);
+  useEffect(() => { const id = setInterval(() => tick((n) => n + 1), 60000); return () => clearInterval(id); }, []);
+  return (iso) => {
+    const min = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
+    if (!(min >= 1)) return t("just_now");
+    if (min < 60) return t("min_ago").replace("{n}", min);
+    return t("hr_ago").replace("{n}", Math.floor(min / 60));
+  };
+}
 
-  const search = useCallback(async (q) => {
-    if (q.length < 2) { setSuggestions([]); return; }
-    try { const { data } = await api.get(`/customers/search?q=${encodeURIComponent(q)}`); setSuggestions(data); }
-    catch { /* ignore */ }
+const inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString("en-IN")}`;
+
+// One line about today, tappable into Reports.
+function TodayStrip({ user, today, onOpen }) {
+  const { t } = useLang();
+  if (!today) return <Skeleton className="h-14 rounded-2xl mb-5" />;
+  const bought = today.filter((s) => s.purchased);
+  const revenue = bought.reduce((a, s) => a + Number(s.final_paid || 0), 0);
+  const showMoney = can(user, "stats_view");
+  const Tag = onOpen ? "button" : "div";
+  return (
+    <Tag data-testid="today-sessions-btn" onClick={onOpen}
+      className="w-full mb-5 flex items-center gap-3.5 rounded-2xl bg-white border border-gray-200/80 shadow-card px-4 h-14 text-left transition-colors hover:border-brand-200 active:bg-gray-50">
+      <span className="text-sm font-medium text-gray-600">{t("today_label")}</span>
+      <span className="flex items-baseline gap-1"><span className="num font-semibold text-gray-900">{today.length}</span><span className="text-sm text-gray-600">{t("visits_n")}</span></span>
+      <span className="flex items-baseline gap-1"><span className="num font-semibold text-gray-900">{bought.length}</span><span className="text-sm text-gray-600">{t("bought_n")}</span></span>
+      {showMoney && <span className="num font-semibold text-emerald-700">{inr(revenue)}</span>}
+      {onOpen && <ChevronRight size={18} className="ml-auto text-gray-400 shrink-0" aria-hidden="true" />}
+    </Tag>
+  );
+}
+
+// One section per staff member who started the sessions; yours first.
+function groupByAdmin(list, user) {
+  const groups = new Map();
+  for (const s of list) {
+    const id = s.admin_id || "unknown";
+    if (!groups.has(id)) groups.set(id, { id, name: s.admin_username || "", mine: id === user?.id, items: [] });
+    groups.get(id).items.push(s);
+  }
+  return [...groups.values()].sort((a, b) => (b.mine - a.mine) || a.name.localeCompare(b.name));
+}
+
+function SessionCard({ s, since, onOpen }) {
+  const { t } = useLang();
+  return (
+    <button data-testid={`session-card-${s.id}`} onClick={onOpen}
+      className="group w-full text-left bg-white rounded-2xl border border-gray-200/80 shadow-card p-3 flex gap-3.5 transition-all hover:shadow-lift hover:border-brand-200 active:scale-[0.99] touch-manipulation">
+      <Avatar src={s.thumb} className="w-16 h-20 rounded-xl shrink-0" />
+      <div className="flex-1 min-w-0 py-0.5">
+        <div className="flex items-start justify-between gap-2">
+          <p className="font-semibold text-gray-900 truncate text-base">{s.customer_name}</p>
+          <span className="shrink-0 inline-flex items-center gap-1 text-[13px] text-gray-600 num" title={`${t("started_at")} ${fmt(s.start_time)}`}>
+            <Clock size={13} aria-hidden="true" /> {since(s.start_time)}
+          </span>
+        </div>
+        <p className="text-sm text-gray-600 num">{s.mobile}</p>
+        <HistoryStrip h={s.history} />
+      </div>
+    </button>
+  );
+}
+
+export default function Canvas({ user, openSession, onNew, openReports }) {
+  const { t } = useLang();
+  const since = useSince();
+  const [sessions, setSessions] = useState(null);
+  const [today, setToday] = useState(null);
+  const [q, setQ] = useState("");
+
+  const load = useCallback(() => {
+    api.get("/sessions/active").then((r) => setSessions(r.data)).catch(() => setSessions((x) => x || []));
+    api.get("/sessions/today").then((r) => setToday(r.data)).catch(() => setToday((x) => x || []));
   }, []);
+  // Live: other staff start and end sessions too. Refresh while the tab is visible.
+  useEffect(() => {
+    load();
+    const id = setInterval(() => { if (document.visibilityState === "visible") load(); }, 15000);
+    const onVis = () => document.visibilityState === "visible" && load();
+    document.addEventListener("visibilitychange", onVis);
+    return () => { clearInterval(id); document.removeEventListener("visibilitychange", onVis); };
+  }, [load]);
 
-  const pick = (c) => {
-    setName(c.name || ""); setMobile(c.mobile || ""); setMobile2(c.mobile2 || "");
-    setExtra(c.extra || {}); if (c.photo) setPhoto(c.photo);
-    setSuggestions([]);
-    toast.success("Customer details loaded");
-  };
-
-  const submit = async () => {
-    if (!name || !mobile) { toast.error("Name & mobile required"); return; }
-    if (!photo) { toast.error(t("photo_required")); return; }
-    setSaving(true);
-    try {
-      const { data } = await api.post("/sessions", { customer_name: name, mobile, mobile2, photo, extra });
-      onCreated(data);
-    } catch (e) { toast.error(apiErr(e)); }
-    setSaving(false);
-  };
-
-  if (showCam) return <Camera onCapture={(img) => { setPhoto(img); setShowCam(false); }} onClose={() => setShowCam(false)} />;
+  const needle = q.trim().toLowerCase();
+  const shown = (sessions || []).filter((s) => !needle || [s.customer_name, s.mobile].some((v) => (v || "").toLowerCase().includes(needle)));
+  const count = sessions?.length || 0;
+  const canStart = can(user, "sessions_manage");
+  const groups = groupByAdmin(shown, user);
+  const canReports = can(user, "history_view") || can(user, "stats_view");
 
   return (
-    <div className="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center justify-center" onClick={onClose}>
-      <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[92vh] overflow-y-auto no-scrollbar" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white">
-          <h3 className="font-semibold text-lg">{t("new_session")}</h3>
-          <button data-testid="close-create-session" onClick={onClose} className="p-1 text-gray-500"><X size={22} /></button>
-        </div>
-        <div className="p-4 space-y-4">
-          <div className="relative">
-            <label className="text-xs text-gray-500 uppercase tracking-wider">{t("mobile")}</label>
-            <input data-testid="session-mobile" value={mobile} inputMode="numeric"
-              onChange={(e) => { setMobile(e.target.value); search(e.target.value); }}
-              className="mt-1 w-full border rounded-lg px-3 py-2.5 focus:outline-none focus:border-[#1E3A8A]" />
-            {suggestions.length > 0 && (
-              <div className="absolute z-10 inset-x-0 mt-1 bg-white border rounded-lg shadow-lg max-h-52 overflow-y-auto">
-                {suggestions.map((c) => (
-                  <button data-testid={`suggestion-${c.id}`} key={c.id} onClick={() => pick(c)} className="block w-full text-left px-3 py-2 hover:bg-gray-50 text-sm border-b last:border-0">
-                    <span className="font-medium">{c.name}</span> · <span className="text-gray-500">{c.mobile}</span>
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 uppercase tracking-wider">{t("cust_name")}</label>
-            <input data-testid="session-name" value={name} onChange={(e) => { setName(e.target.value); search(e.target.value); }}
-              className="mt-1 w-full border rounded-lg px-3 py-2.5 focus:outline-none focus:border-[#1E3A8A]" />
-          </div>
-          <div>
-            <label className="text-xs text-gray-500 uppercase tracking-wider">{t("mobile2")}</label>
-            <input data-testid="session-mobile2" value={mobile2} inputMode="numeric" onChange={(e) => setMobile2(e.target.value)}
-              className="mt-1 w-full border rounded-lg px-3 py-2.5 focus:outline-none focus:border-[#1E3A8A]" />
-          </div>
-          {fields.map((f) => (
-            <div key={f.id}>
-              <label className="text-xs text-gray-500 uppercase tracking-wider">{f.label}</label>
-              {f.type === "checkbox" ? (
-                <input type="checkbox" data-testid={`field-${f.id}`} checked={!!extra[f.label]} onChange={(e) => setExtra({ ...extra, [f.label]: e.target.checked })} className="mt-2 ml-1 w-5 h-5" />
-              ) : (
-                <input data-testid={`field-${f.id}`} type={f.type === "date" ? "date" : f.type === "number" ? "number" : "text"}
-                  value={extra[f.label] || ""} onChange={(e) => setExtra({ ...extra, [f.label]: e.target.value })}
-                  className="mt-1 w-full border rounded-lg px-3 py-2.5 focus:outline-none focus:border-[#1E3A8A]" />
-              )}
-            </div>
-          ))}
-          <div>
-            <label className="text-xs text-gray-500 uppercase tracking-wider">Photo *</label>
-            <div className="mt-1">
-              {photo ? (
-                <div className="flex items-center gap-3">
-                  <img src={photo} alt="" className="w-20 h-24 object-cover rounded-lg border" />
-                  <button data-testid="recapture-photo" onClick={() => setShowCam(true)} className="text-sm text-[#1E3A8A] underline">{t("retake")}</button>
-                </div>
-              ) : (
-                <button data-testid="capture-photo-btn" onClick={() => setShowCam(true)} className="w-full border-2 border-dashed border-gray-300 rounded-lg py-6 text-gray-500 text-sm">{t("capture_photo")}</button>
-              )}
-            </div>
-          </div>
-          <button data-testid="create-session-submit" onClick={submit} disabled={saving} className="w-full bg-[#1E3A8A] text-white py-3 rounded-lg font-semibold disabled:opacity-50">
-            {saving ? "..." : t("create_session")}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+    <Page>
+      <PageHeader title={t("canvas_title")}
+        subtitle={sessions ? (count ? t("canvas_sub").replace("{n}", count) : t("canvas_sub_none")) : " "}
+        actions={canStart && <Button data-testid="new-session-btn" icon={Plus} onClick={onNew} className="hidden lg:inline-flex">{t("new_session")}</Button>} />
 
-function TodayPopup({ onClose }) {
-  const { t } = useLang();
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
-  const [list, setList] = useState([]);
-  useEffect(() => { api.get(`/sessions/today?date=${date}`).then((r) => setList(r.data)).catch(() => {}); }, [date]);
-  const shift = (d) => { const dt = new Date(date); dt.setDate(dt.getDate() + d); setDate(dt.toISOString().slice(0, 10)); };
-  return (
-    <div className="fixed inset-0 z-40 bg-black/40 flex items-end sm:items-center justify-center" onClick={onClose}>
-      <div className="bg-white w-full sm:max-w-md sm:rounded-2xl rounded-t-2xl max-h-[80vh] overflow-y-auto no-scrollbar" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-4 border-b sticky top-0 bg-white">
-          <h3 className="font-semibold">{t("past_today")}</h3>
-          <button onClick={onClose} className="p-1 text-gray-500"><X size={22} /></button>
-        </div>
-        <div className="flex items-center justify-between px-4 py-3">
-          <button data-testid="day-prev" onClick={() => shift(-1)} className="px-3 py-1 bg-gray-100 rounded-lg">‹</button>
-          <span className="font-medium">{fmtDate(date)} {new Date(date).getFullYear()}</span>
-          <button data-testid="day-next" onClick={() => shift(1)} className="px-3 py-1 bg-gray-100 rounded-lg">›</button>
-        </div>
-        <div className="p-4 grid grid-cols-2 gap-3">
-          {list.length === 0 && <p className="col-span-2 text-center text-gray-400 text-sm py-6">—</p>}
-          {list.map((s) => (
-            <div key={s.id} className={`p-3 rounded-xl border text-sm ${s.status === "active" ? "border-emerald-300 bg-emerald-50" : "bg-gray-50"}`}>
-              <p className="font-medium truncate">{s.customer_name}</p>
-              <p className="text-gray-500">{s.mobile}</p>
-              <p className="text-xs text-gray-400 mt-1">{fmt(s.start_time)}</p>
-              {s.status === "closed" && <p className={`text-xs mt-1 ${s.purchased ? "text-emerald-600" : "text-gray-400"}`}>{s.purchased ? `✓ ₹${s.final_paid}` : "✗"}</p>}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
+      <TodayStrip user={user} today={today} onOpen={canReports ? openReports : undefined} />
 
-export default function Canvas({ user, openSession }) {
-  const { t } = useLang();
-  const [sessions, setSessions] = useState([]);
-  const [showCreate, setShowCreate] = useState(false);
-  const [showToday, setShowToday] = useState(false);
-  const [fields, setFields] = useState([]);
-
-  const load = () => api.get("/sessions/active").then((r) => setSessions(r.data)).catch(() => {});
-  useEffect(() => { load(); api.get("/config/fields").then((r) => setFields(r.data)).catch(() => {}); }, []);
-
-  return (
-    <div className="p-4 pb-28">
-      <div className="flex items-center justify-between mb-4">
-        <h2 className="font-semibold text-xl">{t("canvas_title")}</h2>
-        <button data-testid="today-sessions-btn" onClick={() => setShowToday(true)} className="flex items-center gap-1.5 text-sm text-gray-600 bg-white border rounded-full px-3 py-1.5"><History size={15} /> {t("past_today")}</button>
-      </div>
-
-      {sessions.length === 0 ? (
-        <div className="text-center text-gray-400 py-20 text-sm">{t("no_sessions")}</div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {sessions.map((s) => (
-            <button data-testid={`session-card-${s.id}`} key={s.id} onClick={() => openSession(s.id)}
-              className="text-left bg-white border border-gray-200 rounded-xl p-4 hover:border-[#1E3A8A] hover:shadow-sm transition-all">
-              <div className="flex items-center gap-2 mb-2"><span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" /><span className="text-xs text-emerald-600 font-medium uppercase tracking-wide">Active</span></div>
-              <div className="flex items-center gap-2 text-gray-900 font-semibold"><User size={16} className="text-gray-400" />{s.customer_name}</div>
-              <div className="flex items-center gap-2 text-gray-500 text-sm mt-1"><Phone size={14} />{s.mobile}</div>
-              <div className="flex items-center gap-2 text-gray-400 text-xs mt-2"><Clock size={13} />{fmt(s.start_time)}</div>
-            </button>
-          ))}
+      {count > 4 && (
+        <div className="relative mb-4 lg:max-w-md">
+          <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500" aria-hidden="true" />
+          <input data-testid="session-search" type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t("search_sessions")} aria-label={t("search_sessions")} className={`${inputCls} pl-10`} />
         </div>
       )}
 
-      <button data-testid="new-session-btn" onClick={() => setShowCreate(true)}
-        className="fixed bottom-6 left-1/2 -translate-x-1/2 z-30 flex items-center gap-2 bg-[#1E3A8A] text-white px-6 py-3.5 rounded-full font-semibold shadow-lg hover:bg-[#16306f]">
-        <Plus size={20} /> {t("new_session")}
-      </button>
-
-      {showCreate && <CreateSession fields={fields} onClose={() => setShowCreate(false)} onCreated={(s) => { setShowCreate(false); load(); openSession(s.id); }} />}
-      {showToday && <TodayPopup onClose={() => setShowToday(false)} />}
-    </div>
+      {sessions === null ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 lg:gap-4">
+          {[0, 1, 2].map((i) => <Skeleton key={i} className="h-[106px] rounded-2xl" />)}
+        </div>
+      ) : count === 0 ? (
+        <Card><Empty icon={Users} title={t("no_sessions_title")} body={t("no_sessions")}
+          action={canStart && <Button size="lg" icon={Plus} onClick={onNew}>{t("new_session")}</Button>} /></Card>
+      ) : shown.length === 0 ? (
+        <Card><Empty icon={Search} title={t("no_match")} className="py-10" /></Card>
+      ) : (
+        <div className="space-y-6 lg:space-y-8">
+          {groups.map((g) => (
+            <section key={g.id} data-testid={`admin-section-${g.name}`}>
+              {groups.length > 1 && (
+                <div className="flex items-center gap-2.5 mb-2.5">
+                  <span className={`w-7 h-7 rounded-full text-[11px] font-semibold flex items-center justify-center ${g.mine ? "bg-brand-700 text-white" : "bg-gray-200 text-gray-700"}`} aria-hidden="true">{(g.name || "?").slice(0, 2).toUpperCase()}</span>
+                  <h2 className="font-semibold text-gray-900">{g.mine ? t("my_customers") : t("staff_customers").replace("{name}", g.name)}</h2>
+                  <span className="num text-sm text-gray-600">{g.items.length}</span>
+                </div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3 lg:gap-4">
+                {g.items.map((s) => <SessionCard key={s.id} s={s} since={since} onOpen={() => openSession(s.id)} />)}
+              </div>
+            </section>
+          ))}
+        </div>
+      )}
+    </Page>
   );
 }
